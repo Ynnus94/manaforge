@@ -8,29 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Project foundation setup
-- Next.js 14 with App Router
-- TypeScript 5 configuration
-- Tailwind CSS + shadcn/ui integration
-- Supabase client setup (server and browser clients)
-- Test connection page (`/test-connection`)
-- Landing page with feature showcase
-- Complete project documentation:
-  - PROJECT_OVERVIEW.md - Vision and architecture
-  - DEV_GUIDE.md - Setup and contribution guide
-  - DATABASE_SCHEMA.md - Complete database schema with RLS
-  - WORKFLOW_GUIDE.md - AI agent collaboration
-  - AGENT_SUMMARY.md - Quick reference
-  - CURRENT_TASK.md - Active roadmap
-- AI agent prompts (Planner, Builder, Looker, Pusher)
-- Repository URL documented: `git@github.com:Ynnus94/brew.git`
-- CHANGELOG.md for version tracking
+- Nothing yet
 
 ### Changed
-- *Nothing yet*
+- Nothing yet
 
 ### Fixed
-- *Nothing yet*
+- Nothing yet
+
+## [0.2.0] - 2025-11-04
+
+### Added
+- **Dashboard Page** (`/dashboard`)
+  - Stats bar showing deck/collection counts
+  - Quick action buttons for new deck/collection
+  - Recent decks list with format badges
+  - Welcome empty state for new users
+- **Core Hooks**
+  - `useDeck` - Complete deck CRUD operations with real-time updates
+  - `useCollection` - Collection management with card operations
+  - `useStagingArea` - Git-style staging pattern for deck changes
+  - `useCardSearch` - Scryfall API search with debouncing
+  - `useDebounce` - Utility hook for input debouncing
+- **Scryfall Integration**
+  - Client with card search endpoint
+  - Complete type definitions for Scryfall API
+  - Error handling and rate limit management
+- **Type System**
+  - `Card` interface with Scryfall schema
+  - `Deck` and `DeckCard` types
+  - `StagedChange` types for git-style workflow
+  - Complete type safety across the application
+- **Utility Functions**
+  - Mana symbol parsing and color identity calculation
+  - Deck statistics (mana curve, color distribution)
+  - Format validation (Commander, Standard, Modern, etc.)
+- **UI Components**
+  - `PageHeader` - Consistent page titles with breadcrumbs
+  - `EmptyState` - Reusable empty state component
+  - `StatCard` - Dashboard statistics cards
+  - Dashboard-specific components (QuickActions, RecentDecks, etc.)
+- **Data Providers**
+  - `QueryProvider` - React Query setup for data fetching
+- **Documentation**
+  - MVP Design Plan
+  - Builder Progress tracking
+  - Build Status documentation
+  - Unicorn-grade quality checklist
+
+### Changed
+- Updated Supabase middleware for @supabase/ssr v0.1.0 API
+- Updated Supabase server client for new cookie methods
+- Enhanced landing page with better CTAs
+- Improved app layout with Toaster integration
+
+### Fixed
+- Toaster import path (moved to @/hooks/use-toast)
+- Supabase cookie methods (getAll/setAll → get/set/remove)
+- TypeScript compilation errors (100% type-safe)
+- Auth validation schemas added
 
 ## [0.1.0] - 2025-01-01
 
