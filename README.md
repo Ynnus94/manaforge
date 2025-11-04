@@ -1,8 +1,8 @@
-# MTG Deck Builder 🃏
+# MANAFORGE 🃏
 
 > The future of Magic: The Gathering deck building with AI superpowers
 
-**Repository**: `git@github.com:Ynnus94/brew.git`
+**Repository**: `git@github.com:Ynnus94/manaforge.git`
 
 ## ✨ Features
 
@@ -16,8 +16,8 @@
 
 ```bash
 # Clone the repository
-git clone git@github.com:Ynnus94/brew.git
-cd brew
+git clone git@github.com:Ynnus94/manaforge.git
+cd manaforge
 
 # Install dependencies
 npm install
