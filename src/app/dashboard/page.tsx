@@ -3,10 +3,15 @@
  * 
  * Main landing page after login
  * Shows stats, recent decks, and quick actions
+ * 
+ * Responsive:
+ * - Desktop: 3-column grid
+ * - Mobile: Vertical stack
  */
 
 import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { ResponsiveLayout } from '@/components/layout/ResponsiveLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatsBar } from '@/components/dashboard/StatsBar';
 import { RecentDecks } from '@/components/dashboard/RecentDecks';
@@ -52,34 +57,36 @@ export default async function DashboardPage() {
   const hasDecks = (deckCount || 0) > 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <PageHeader
-        title={`Welcome back${user.email ? `, ${user.email.split('@')[0]}` : ''}!`}
-        description="Here's what's happening with your decks"
-      />
-
-      <div className="container mx-auto px-4 py-8 space-y-8">
-        {/* Stats Bar */}
-        <StatsBar
-          deckCount={deckCount || 0}
-          cardsCount={cardsCount || 0}
-          formatsCount={uniqueFormats}
+    <ResponsiveLayout>
+      <div className="min-h-screen bg-background p-4 md:p-6">
+        <PageHeader
+          title={`Welcome back${user.email ? `, ${user.email.split('@')[0]}` : ''}!`}
+          description="Here's what's happening with your decks"
         />
 
-        {hasDecks ? (
-          <>
-            {/* Recent Decks */}
-            <RecentDecks decks={decks || []} />
+        <div className="container mx-auto space-y-6 mt-6">
+          {/* Stats Bar */}
+          <StatsBar
+            deckCount={deckCount || 0}
+            cardsCount={cardsCount || 0}
+            formatsCount={uniqueFormats}
+          />
 
-            {/* Quick Actions */}
-            <QuickActions />
-          </>
-        ) : (
-          /* Empty State for New Users */
-          <WelcomeEmptyState />
-        )}
+          {hasDecks ? (
+            <>
+              {/* Recent Decks */}
+              <RecentDecks decks={decks || []} />
+
+              {/* Quick Actions */}
+              <QuickActions />
+            </>
+          ) : (
+            /* Empty State for New Users */
+            <WelcomeEmptyState />
+          )}
+        </div>
       </div>
-    </div>
+    </ResponsiveLayout>
   );
 }
 

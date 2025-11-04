@@ -2,12 +2,12 @@
 
 ## Repository Information
 
-**Git Repository**: `git@github.com:Ynnus94/brew.git`
+**Git Repository**: `git@github.com:Ynnus94/manaforge.git`
 
 ```bash
 # Clone the repository
-git clone git@github.com:Ynnus94/brew.git
-cd brew
+git clone git@github.com:Ynnus94/manaforge.git
+cd manaforge
 ```
 
 ## Initial Setup
@@ -367,7 +367,8 @@ npm run build
 - [Project Overview](./PROJECT_OVERVIEW.md)
 - [Current Tasks](./CURRENT_TASK.md)
 - [Workflow Guide](./WORKFLOW_GUIDE.md)
-- [API Documentation](./API_DOCS.md) *(coming soon)*
+- [API Documentation](./API_DOCS.md)
+- [Database Schema](./DATABASE_SCHEMA.md)
 
 ## Contributing
 

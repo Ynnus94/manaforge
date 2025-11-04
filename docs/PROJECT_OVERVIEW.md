@@ -1,6 +1,6 @@
-# MTG Deck Builder - Project Overview
+# MANAFORGE - Project Overview
 
-**Repository**: `git@github.com:Ynnus94/brew.git`
+**Repository**: `git@github.com:Ynnus94/manaforge.git`
 
 ## Vision
 Build a modern Magic: The Gathering deck building application with AI-powered suggestions and collection management.

@@ -1,6 +1,6 @@
 {
-  "name": "mtg-deck-builder",
-  "version": "0.1.0",
+  "name": "manaforge",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,6 +14,7 @@
     "setup:all": "./scripts/setup-all.sh"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.3",
