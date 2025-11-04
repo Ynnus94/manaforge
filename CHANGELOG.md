@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.3.1] - 2025-11-04
+
+### Added
+- **UI Components**
+  - `alert-dialog.tsx` - Alert dialog component from Radix UI
+  - `AddCardDialog.tsx` - Dialog for adding cards to collection
+  - `CreateDeckDialog.tsx` - Dialog for creating new decks
+  
+- **Documentation**
+  - `UI_POLISH_COMPLETE.md` - UI polish completion report
+  - `docs/GET_TO_FUNCTIONAL.md` - Functional requirements guide
+  - `docs/LOOKER_HONEST_FUNCTIONAL_AUDIT.md` - Functional audit report
+  - `docs/LOOKER_LATEST_CHANGES_QA.md` - Latest changes QA report
+
+### Changed
+- **Dependencies**
+  - Added `@radix-ui/react-alert-dialog@^1.1.15` for dialog functionality
+  - Updated `@radix-ui/react-slot@^1.2.4` (from 1.2.3)
+
 ## [0.3.0] - 2025-11-04
 
 ### Added - Sprint 1 Complete! 🚀
