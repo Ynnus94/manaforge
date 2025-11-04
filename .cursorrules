@@ -1,0 +1,767 @@
+# MTG Deck Builder - Cursor Rules
+
+**Project-wide coding standards for unicorn-grade software**
+
+---
+
+## 🎯 Project Context
+
+This is THE Magic: The Gathering deck builder with AI superpowers. We're solving the pain of juggling ChatGPT + Scryfall + EDHREC + price sites. Core features: git-style validation, superbrew analysis, and AI that never hallucinates.
+
+**Tech Stack**: Next.js 14 + Supabase + TypeScript + shadcn/ui + Claude API + MCP Server
+
+---
+
+## 📏 Code Style
+
+### TypeScript
+- **Strict mode enabled**: No `any` types unless absolutely necessary with comment explaining why
+- **Explicit types**: Prefer interfaces over type aliases for objects
+- **Type imports**: Use `import type` for type-only imports
+- **Supabase types**: Generate and use Supabase database types
+
+```typescript
+// ✅ GOOD
+import type { Database } from '@/lib/supabase/types';
+import type { Card, DeckCard } from '@/types/card';
+
+type Collection = Database['public']['Tables']['collections']['Row'];
+
+interface DeckWithCards {
+  deck: Database['public']['Tables']['decks']['Row'];
+  cards: DeckCard[];
+}
+
+// ❌ BAD
+import { Database } from '@/lib/supabase/types'; // Not type-only
+type Collection = any; // No any!
+```
+
+### Naming Conventions
+- **Components**: PascalCase (`CardGrid`, `StagingArea`)
+- **Functions**: camelCase (`searchCards`, `commitChanges`)
+- **Constants**: UPPER_SNAKE_CASE (`MAX_DECK_SIZE`, `SCRYFALL_API_URL`)
+- **Types/Interfaces**: PascalCase (`Card`, `StagedChange`)
+- **Files**: Match export name (`CardGrid.tsx`, `useCollection.ts`)
+- **Database**: snake_case (matches Supabase convention)
+
+### File Organization
+```
+src/
+  app/
+    (auth)/                 # Auth pages (grouped route)
+    api/                    # API routes
+    deck/                   # Deck pages
+    collection/             # Collection pages
+  components/
+    ui/                     # shadcn components
+    cards/                  # Card-related components
+    deck/                   # Deck-specific components
+    collection/             # Collection components
+    ai/                     # AI chat/suggestions
+  hooks/
+    useCollection.ts        # Collection operations
+    useDeck.ts              # Deck operations
+    useStagingArea.ts       # Git-style staging
+  lib/
+    supabase/
+      client.ts             # Supabase client
+      types.ts              # Generated types
+      queries.ts            # Common queries
+    scryfall/
+      client.ts             # Scryfall API
+      types.ts              # Scryfall types
+    ai/
+      mcp.ts                # MCP server integration
+      prompts.ts            # Claude prompts
+    utils/
+      validation.ts         # Format validation
+      calculations.ts       # Mana curve, etc.
+  types/
+    card.ts                 # Card types
+    deck.ts                 # Deck types
+    staging.ts              # Staging types
+```
+
+---
+
+## 🏗️ Architecture Patterns
+
+### Supabase Patterns
+
+#### Client Initialization
+```typescript
+// ✅ GOOD: Server component
+import { createServerClient } from '@/lib/supabase/server';
+
+export default async function Page() {
+  const supabase = createServerClient();
+  const { data } = await supabase.from('decks').select('*');
+  return <DeckList decks={data} />;
+}
+
+// ✅ GOOD: Client component
+'use client';
+import { createBrowserClient } from '@/lib/supabase/client';
+
+export function DeckList() {
+  const supabase = createBrowserClient();
+  // Use with real-time subscriptions
+}
+
+// ❌ BAD: Wrong client type
+import { createServerClient } from '@/lib/supabase/server';
+export function ClientComponent() {
+  const supabase = createServerClient(); // Can't use in client!
+}
+```
+
+#### Real-Time Subscriptions
+```typescript
+// ✅ GOOD: Proper cleanup
+useEffect(() => {
+  const supabase = createBrowserClient();
+  
+  const channel = supabase
+    .channel('deck-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'deck_cards',
+        filter: `deck_id=eq.${deckId}`
+      },
+      (payload) => {
+        // Update local state
+        handleRealtimeUpdate(payload);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [deckId]);
+```
+
+#### Row Level Security Queries
+```typescript
+// ✅ GOOD: RLS automatically enforced
+const { data, error } = await supabase
+  .from('collections')
+  .select('*')
+  // No need to filter by user_id - RLS handles it!
+
+// ❌ BAD: Manually filtering (RLS does this)
+const { data } = await supabase
+  .from('collections')
+  .select('*')
+  .eq('user_id', userId); // Redundant if RLS is set up
+```
+
+### Git-Style Validation Pattern
+
+#### Staging State Structure
+```typescript
+// Always use this structure for staged changes
+interface StagedChange {
+  id: string; // Temporary ID for UI
+  action: 'add' | 'remove' | 'update' | 'move';
+  scryfall_id: string;
+  quantity: number;
+  old_quantity?: number; // For updates
+  category?: 'commander' | 'mainboard' | 'sideboard' | 'maybeboard';
+  old_category?: string; // For moves
+  timestamp: number; // When staged
+}
+
+// Staging state is CLIENT-SIDE ONLY (don't persist until commit)
+const [stagedChanges, setStagedChanges] = useState<StagedChange[]>([]);
+
+// Apply all staged changes on commit
+const commitChanges = async (message: string) => {
+  // 1. Apply changes to database
+  await applyChangesToDatabase(stagedChanges);
+  
+  // 2. Save to history
+  await saveToHistory({
+    changes: stagedChanges,
+    message,
+    timestamp: Date.now()
+  });
+  
+  // 3. Clear staging
+  setStagedChanges([]);
+};
+```
+
+#### Commit History Pattern
+```typescript
+// Always save to history table on commit
+interface HistoryEntry {
+  id: string;
+  entity_id: string; // deck_id or collection_id
+  changes: StagedChange[];
+  message: string;
+  committed_at: string;
+  committed_by: string; // user_id
+}
+
+// Query history
+const { data: history } = await supabase
+  .from('deck_history')
+  .select('*')
+  .eq('deck_id', deckId)
+  .order('committed_at', { ascending: false });
+```
+
+### Components
+
+#### Component Structure
+- **Max 200 lines**: Break larger components into smaller ones
+- **Server components by default**: Use 'use client' only when needed
+- **Single responsibility**: One clear purpose per component
+- **Props interface**: Always define explicit props type
+
+```typescript
+// ✅ GOOD: Clear, focused, typed
+interface StagingAreaProps {
+  changes: StagedChange[];
+  onCommit: (message: string) => Promise<void>;
+  onDiscard: (changeId: string) => void;
+  isCommitting?: boolean;
+}
+
+export function StagingArea({ 
+  changes, 
+  onCommit, 
+  onDiscard, 
+  isCommitting = false 
+}: StagingAreaProps) {
+  // Component logic
+}
+
+// ❌ BAD: Too many responsibilities, unclear props
+export function DeckBuilder(props: any) {
+  // 500 lines of mixed concerns...
+}
+```
+
+#### When to Use 'use client'
+```typescript
+// ✅ Use 'use client' for:
+'use client'; // Needed!
+
+// - useState, useEffect, other hooks
+// - Event handlers (onClick, onChange)
+// - Browser APIs (localStorage, window)
+// - Real-time subscriptions
+
+// ❌ Don't use 'use client' for:
+// - Pure display components
+// - Server data fetching
+// - SEO-important content
+```
+
+### Custom Hooks
+
+#### Supabase Data Hooks
+```typescript
+// ✅ GOOD: Complete CRUD hook
+export function useCollection(collectionId: string) {
+  const supabase = createBrowserClient();
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchCollection = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('collections')
+          .select('*, collection_cards(*)')
+          .eq('id', collectionId)
+          .single();
+
+        if (error) throw error;
+        if (!cancelled) setCollection(data);
+      } catch (err) {
+        if (!cancelled) setError(err as Error);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    fetchCollection();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel(`collection-${collectionId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'collection_cards',
+        filter: `collection_id=eq.${collectionId}`
+      }, () => {
+        fetchCollection(); // Refetch on changes
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [collectionId]);
+
+  return { collection, isLoading, error };
+}
+```
+
+#### Staging Hook Pattern
+```typescript
+// ✅ GOOD: Reusable staging logic
+export function useStagingArea<T extends StagedChange>() {
+  const [staged, setStaged] = useState<T[]>([]);
+
+  const stage = useCallback((change: Omit<T, 'id' | 'timestamp'>) => {
+    setStaged(prev => [...prev, {
+      ...change,
+      id: crypto.randomUUID(),
+      timestamp: Date.now()
+    } as T]);
+  }, []);
+
+  const discard = useCallback((id: string) => {
+    setStaged(prev => prev.filter(c => c.id !== id));
+  }, []);
+
+  const clear = useCallback(() => {
+    setStaged([]);
+  }, []);
+
+  return { staged, stage, discard, clear };
+}
+```
+
+---
+
+## 🎨 Styling with shadcn/ui
+
+### Component Usage
+```typescript
+// ✅ GOOD: Use shadcn components
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+<Card>
+  <CardHeader>
+    <CardTitle>Lightning Bolt</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Button onClick={handleAdd}>Add to Deck</Button>
+  </CardContent>
+</Card>
+
+// ❌ BAD: Don't reinvent shadcn components
+<div className="rounded-lg border p-4">
+  <button className="px-4 py-2...">...</button>
+</div>
+```
+
+### Tailwind CSS Patterns
+```typescript
+// ✅ GOOD: Mobile-first, semantic
+<div className="
+  grid 
+  grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4
+  gap-4 p-4
+  bg-background text-foreground
+">
+
+// ✅ GOOD: Use CSS variables (shadcn theme)
+className="bg-primary text-primary-foreground hover:bg-primary/90"
+
+// ❌ BAD: Hardcoded colors
+className="bg-blue-600 text-white hover:bg-blue-700"
+```
+
+### Animations
+```typescript
+// ✅ GOOD: Smooth transitions
+<div className="
+  transition-all duration-300 ease-in-out
+  hover:scale-105 hover:shadow-lg
+">
+
+// Use Framer Motion for complex animations
+import { motion } from 'framer-motion';
+
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3 }}
+>
+```
+
+---
+
+## 🔒 Security
+
+### Supabase Security
+```typescript
+// ✅ GOOD: Trust RLS, use server actions for mutations
+// app/actions/deck.ts
+'use server';
+
+export async function addCardToDeck(deckId: string, cardId: string) {
+  const supabase = createServerClient();
+  
+  // RLS ensures user owns this deck
+  const { error } = await supabase
+    .from('deck_cards')
+    .insert({ deck_id: deckId, scryfall_id: cardId });
+    
+  if (error) throw error;
+}
+
+// ❌ BAD: Client-side mutations without validation
+const supabase = createBrowserClient();
+await supabase.from('deck_cards').insert(...); // Risky!
+```
+
+### API Routes
+```typescript
+// ✅ GOOD: Validate auth in API routes
+// app/api/ai/chat/route.ts
+import { createServerClient } from '@/lib/supabase/server';
+
+export async function POST(request: Request) {
+  const supabase = createServerClient();
+  
+  // Check auth
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+  
+  // Process request
+  const body = await request.json();
+  // ...
+}
+```
+
+### Input Sanitization
+```typescript
+// ✅ GOOD: Sanitize and validate
+import { z } from 'zod';
+
+const CardSchema = z.object({
+  scryfall_id: z.string().uuid(),
+  quantity: z.number().int().min(1).max(100)
+});
+
+const validated = CardSchema.parse(input);
+
+// ❌ BAD: Trust user input
+const cardId = request.body.cardId; // No validation!
+```
+
+---
+
+## ⚡ Performance
+
+### Scryfall API Optimization
+```typescript
+// ✅ GOOD: Debounce + cache
+const debouncedSearch = useDebounce(query, 300);
+
+const { data: cards, isLoading } = useQuery({
+  queryKey: ['cards', debouncedSearch],
+  queryFn: () => searchCards(debouncedSearch),
+  enabled: debouncedSearch.length >= 3,
+  staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+});
+
+// ✅ GOOD: Batch requests
+const fetchMultipleCards = async (ids: string[]) => {
+  // Use Scryfall collection endpoint
+  const response = await fetch('https://api.scryfall.com/cards/collection', {
+    method: 'POST',
+    body: JSON.stringify({ identifiers: ids.map(id => ({ id })) })
+  });
+};
+
+// ❌ BAD: Individual requests
+for (const id of cardIds) {
+  await fetchCard(id); // Slow!
+}
+```
+
+### Image Optimization
+```typescript
+// ✅ GOOD: Next.js Image component
+import Image from 'next/image';
+
+<Image
+  src={card.image_uris.normal}
+  alt={card.name}
+  width={300}
+  height={420}
+  loading="lazy"
+  className="rounded-lg"
+/>
+
+// ❌ BAD: Regular img tag
+<img src={card.image_uris.normal} alt={card.name} />
+```
+
+### Real-time Optimization
+```typescript
+// ✅ GOOD: Throttle real-time updates
+import { throttle } from 'lodash';
+
+const handleRealtimeUpdate = throttle((payload) => {
+  updateDeck(payload);
+}, 1000); // Max once per second
+
+// ❌ BAD: Update on every change
+supabase.on('*', (payload) => {
+  updateDeck(payload); // Too frequent!
+});
+```
+
+---
+
+## 🧪 Testing
+
+### Testing Standards
+```typescript
+// ✅ GOOD: Test user behavior
+describe('StagingArea', () => {
+  it('shows staged changes and allows commit', async () => {
+    const onCommit = vi.fn();
+    const changes = [
+      { action: 'add', scryfall_id: '123', quantity: 1 }
+    ];
+    
+    render(<StagingArea changes={changes} onCommit={onCommit} />);
+    
+    // User sees the change
+    expect(screen.getByText(/Lightning Bolt/i)).toBeInTheDocument();
+    
+    // User enters commit message
+    const input = screen.getByPlaceholderText('Commit message');
+    await userEvent.type(input, 'Added burn spell');
+    
+    // User commits
+    const button = screen.getByRole('button', { name: /commit/i });
+    await userEvent.click(button);
+    
+    // Verify commit called
+    expect(onCommit).toHaveBeenCalledWith('Added burn spell');
+  });
+});
+
+// ❌ BAD: Test implementation
+it('useState is called with empty array', () => {
+  const spy = vi.spyOn(React, 'useState');
+  render(<Component />);
+  expect(spy).toHaveBeenCalledWith([]);
+});
+```
+
+### Mock Supabase
+```typescript
+// ✅ GOOD: Mock Supabase for tests
+vi.mock('@/lib/supabase/client', () => ({
+  createBrowserClient: () => ({
+    from: (table: string) => ({
+      select: vi.fn().mockResolvedValue({ data: mockData, error: null }),
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    }),
+  }),
+}));
+```
+
+---
+
+## 🔧 MCP Server Patterns
+
+### Tool Definition
+```typescript
+// ✅ GOOD: Complete tool definition
+export const searchCardsTool = {
+  name: "search_cards",
+  description: "Search for Magic cards by name. Returns accurate card data from Scryfall.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: { 
+        type: "string", 
+        description: "Card name to search for" 
+      },
+      format: { 
+        type: "string", 
+        enum: ["commander", "standard", "modern", "pioneer", "limited"],
+        description: "MTG format for legality filtering"
+      }
+    },
+    required: ["query"]
+  },
+  handler: async (args: { query: string; format?: string }) => {
+    // Implementation
+  }
+};
+```
+
+### Claude + MCP Integration
+```typescript
+// ✅ GOOD: Stream responses
+const response = await fetch('https://api.anthropic.com/v1/messages', {
+  method: 'POST',
+  headers: {
+    'anthropic-version': '2023-06-01',
+    'content-type': 'application/json',
+    'x-api-key': process.env.ANTHROPIC_API_KEY!,
+  },
+  body: JSON.stringify({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    stream: true, // Enable streaming
+    messages: [{ role: 'user', content: prompt }],
+    // MCP server is configured separately
+  }),
+});
+
+// Stream to client
+const stream = response.body;
+return new Response(stream);
+```
+
+---
+
+## 📝 Git Commit Standards
+
+### Commit Message Format
+```bash
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+### Types
+- `feat`: New feature (feat(staging): add commit history view)
+- `fix`: Bug fix (fix(deck): correct commander validation)
+- `docs`: Documentation (docs: update API integration guide)
+- `style`: Formatting (style: format with prettier)
+- `refactor`: Code refactor (refactor(hooks): extract staging logic)
+- `test`: Tests (test: add deck validation tests)
+- `chore`: Maintenance (chore: update dependencies)
+
+### Examples
+```bash
+feat(collection): add CSV import with staging
+fix(ai): prevent hallucinations with MCP tools
+docs(readme): add MCP server setup instructions
+refactor(deck): split DeckBuilder into smaller components
+```
+
+---
+
+## ✅ Pre-Commit Checklist
+
+Before every commit:
+- [ ] TypeScript compiles (`npm run type-check`)
+- [ ] No ESLint errors (`npm run lint`)
+- [ ] Tests pass (`npm test`)
+- [ ] Code formatted (`npm run format`)
+- [ ] No console.logs (except debug utils)
+- [ ] Supabase types regenerated if schema changed
+
+Before every PR:
+- [ ] Feature works end-to-end
+- [ ] Git-style validation flow tested
+- [ ] Real-time updates work
+- [ ] Tests added for new code
+- [ ] Documentation updated
+- [ ] No performance regressions
+
+---
+
+## 🚀 MTG-Specific Guidelines
+
+### Card Data Handling
+```typescript
+// ✅ GOOD: Handle card variations
+interface Card {
+  id: string; // Scryfall ID (unique per printing)
+  oracle_id: string; // Same for all printings
+  name: string;
+  // ... handle double-faced cards
+  card_faces?: Array<{
+    name: string;
+    mana_cost: string;
+    image_uris: ImageUris;
+  }>;
+}
+
+// Check if double-faced
+const isDoubleFaced = card.card_faces && card.card_faces.length > 1;
+```
+
+### Format Validation
+```typescript
+// ✅ GOOD: Comprehensive validation
+export function validateDeck(
+  deck: Deck, 
+  cards: DeckCard[],
+  format: DeckFormat
+): ValidationResult {
+  const errors: string[] = [];
+  
+  // Deck size
+  const mainboardSize = cards.filter(c => c.category === 'mainboard').length;
+  
+  // Card limits
+  const cardCounts = new Map<string, number>();
+  cards.forEach(card => {
+    const count = cardCounts.get(card.scryfall_id) || 0;
+    cardCounts.set(card.scryfall_id, count + card.quantity);
+  });
+  
+  // Format-specific rules
+  if (format === 'commander') {
+    // Check singleton (except basics)
+    // Check color identity
+    // Check 100 card deck size
+  }
+  
+  return { isValid: errors.length === 0, errors };
+}
+```
+
+### Mana Calculations
+```typescript
+// ✅ GOOD: Parse mana costs correctly
+export function parseManaSymbols(manaCost: string): ManaSymbol[] {
+  // Handle {2}{U}{U}, {2/W}, {X}, etc.
+  const regex = /{([^}]+)}/g;
+  const symbols: ManaSymbol[] = [];
+  let match;
+  
+  while ((match = regex.exec(manaCost)) !== null) {
+    symbols.push(match[1] as ManaSymbol);
+  }
+  
+  return symbols;
+}
+```
+
+---
+
+**These rules create the foundation for unicorn-grade software. When in doubt, prioritize: clarity > cleverness, user trust > features, performance > appearance.**
